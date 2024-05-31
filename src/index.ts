@@ -18,12 +18,19 @@ import { tableEditingKey } from './util';
 
 export { CellBookmark, CellSelection } from './cellselection';
 export type { CellSelectionJSON } from './cellselection';
+/* compitable old columnResizing exports use 'as' */
 export {
-  columnResizing,
-  columnResizingPluginKey,
+  tableCellResizing,
+  resizingPluginKey,
   ResizeState,
-} from './columnresizing';
-export type { ColumnResizingOptions, Dragging } from './columnresizing';
+  resizingPluginKey as columnResizingPluginKey,
+  tableCellResizing as columnResizing,
+} from './resizing';
+export type {
+  Dragging,
+  ResizingOptions, 
+  ResizingOptions as ColumnResizingOptions,
+} from './resizing';
 export * from './commands';
 export {
   clipCells as __clipCells,

@@ -28,7 +28,7 @@ import {
   goToNextCell,
   deleteTable,
 } from '../src';
-import { tableEditing, columnResizing, tableNodes, fixTables } from '../src';
+import { tableEditing, tableCellResizing, tableNodes, fixTables } from '../src';
 
 const schema = new Schema({
   nodes: baseSchema.spec.nodes.append(
@@ -79,11 +79,13 @@ if (!contentElement) {
   throw new Error('Failed to find #content');
 }
 const doc = DOMParser.fromSchema(schema).parse(contentElement);
-
 let state = EditorState.create({
   doc,
   plugins: [
-    columnResizing(),
+    tableCellResizing({
+      // lastColumnResizable: false,
+      // lastRowResizable: false,
+    }),
     tableEditing(),
     keymap({
       Tab: goToNextCell(1),
