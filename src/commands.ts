@@ -514,6 +514,7 @@ export function splitCellWithType(
       let baseAttrs = cellNode.attrs;
       const attrs = [];
       const colwidth = baseAttrs.colwidth;
+      const rowheight = baseAttrs.rowheight;
       if (baseAttrs.rowspan > 1) baseAttrs = { ...baseAttrs, rowspan: 1 };
       if (baseAttrs.colspan > 1) baseAttrs = { ...baseAttrs, colspan: 1 };
       const rect = selectedRect(state),
@@ -525,6 +526,15 @@ export function splitCellWithType(
                 ...baseAttrs,
                 colwidth: colwidth && colwidth[i] ? [colwidth[i]] : null,
               }
+            : baseAttrs,
+        );
+      for (let i = 0; i < rect.bottom - rect.top; i++)
+        attrs.push(
+          rowheight
+            ? {
+              ...baseAttrs,
+              rowheight: rowheight && rowheight[i] ? [rowheight[i]] : null,
+            }
             : baseAttrs,
         );
       let lastCell;

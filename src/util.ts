@@ -19,6 +19,14 @@ export interface CellAttrs {
   colspan: number;
   rowspan: number;
   colwidth: number[] | null;
+  rowheight: number[] | null;
+}
+
+/**
+ * @public
+ */
+export interface RowAttrs {
+  rowheight: number[] | null;
 }
 
 /**

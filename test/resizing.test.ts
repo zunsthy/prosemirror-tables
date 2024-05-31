@@ -1,7 +1,7 @@
 import ist from 'ist';
 import { EditorState } from 'prosemirror-state';
 import { DecorationSet } from 'prosemirror-view';
-import { handleDecorations } from '../src/columnresizing';
+import { handleDecorations } from '../src/resizing';
 import { table, doc, tr, cEmpty } from './build';
 import { describe, it } from 'vitest';
 

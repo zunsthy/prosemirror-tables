@@ -114,6 +114,13 @@ export function fixTable(
         ...cell.attrs,
         colwidth: prob.colwidth,
       });
+    } else if (prob.type == 'rowheight mismatch') {
+      const cell = table.nodeAt(prob.pos);
+      if (!cell) continue;
+      tr.setNodeMarkup(tr.mapping.map(tablePos + 1 + prob.pos), null, {
+        ...cell.attrs,
+        rowheight: prob.rowheight,
+      });
     }
   }
   let first, last;

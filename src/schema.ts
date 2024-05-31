@@ -8,7 +8,31 @@ import {
   NodeType,
   Schema,
 } from 'prosemirror-model';
-import { CellAttrs, MutableAttrs } from './util';
+import { CellAttrs, MutableAttrs, RowAttrs } from './util';
+
+function getRowAttrs(dom: HTMLElement | string, extraAttrs: Attrs): Attrs {
+  if (typeof dom === 'string') {
+    return {};
+  }
+
+  const heightAttr = dom.getAttribute('data-rowheight');
+  const heights = 
+    heightAttr && /^\d+(,\d+)*$/.test(heightAttr)
+      ? heightAttr.split(',').map((s) => Number(s))
+      : null;
+  const rowspan = 1;
+  const result: MutableAttrs = {
+    rowheight: heights && heights.length == rowspan ? heights : null,
+  } satisfies RowAttrs;
+  for (const prop in extraAttrs) {
+    const getter = extraAttrs[prop].getFromDOM;
+    const value = getter && getter(dom);
+    if (value != null) {
+      result[prop] = value;
+    }
+  }
+  return result;
+}
 
 function getCellAttrs(dom: HTMLElement | string, extraAttrs: Attrs): Attrs {
   if (typeof dom === 'string') {
@@ -20,11 +44,18 @@ function getCellAttrs(dom: HTMLElement | string, extraAttrs: Attrs): Attrs {
     widthAttr && /^\d+(,\d+)*$/.test(widthAttr)
       ? widthAttr.split(',').map((s) => Number(s))
       : null;
+  const heightAttr = dom.getAttribute('data-rowheight');
+  const heights =
+    heightAttr && /^\d+(,\d+)*$/.test(heightAttr)
+      ? heightAttr.split(',').map((s) => Number(s))
+      : null;
   const colspan = Number(dom.getAttribute('colspan') || 1);
+  const rowspan = Number(dom.getAttribute('rowspan') || 1);
   const result: MutableAttrs = {
     colspan,
-    rowspan: Number(dom.getAttribute('rowspan') || 1),
+    rowspan,
     colwidth: widths && widths.length == colspan ? widths : null,
+    rowheight: heights && heights.length == rowspan ? heights : null,
   } satisfies CellAttrs;
   for (const prop in extraAttrs) {
     const getter = extraAttrs[prop].getFromDOM;
@@ -36,12 +67,27 @@ function getCellAttrs(dom: HTMLElement | string, extraAttrs: Attrs): Attrs {
   return result;
 }
 
+function setRowAttrs(node: Node, extraAttrs: Attrs): Attrs {
+  const attrs: MutableAttrs = {};
+  if (node.attrs.rowheight) {
+    attrs['data-rowheight'] = node.attrs.rowheight.join(',');
+    // attrs.style = `height: ${node.attrs.rowheight}px`;
+  }
+  for (const prop in extraAttrs) {
+    const setter = extraAttrs[prop].setDOMAttr;
+    if (setter) setter(node.attrs[prop], attrs);
+  }
+  return attrs;
+}
+
 function setCellAttrs(node: Node, extraAttrs: Attrs): Attrs {
   const attrs: MutableAttrs = {};
   if (node.attrs.colspan != 1) attrs.colspan = node.attrs.colspan;
   if (node.attrs.rowspan != 1) attrs.rowspan = node.attrs.rowspan;
   if (node.attrs.colwidth)
     attrs['data-colwidth'] = node.attrs.colwidth.join(',');
+  if (node.attrs.rowheight)
+    attrs['data-rowheight'] = node.attrs.rowheight.join(',');
   for (const prop in extraAttrs) {
     const setter = extraAttrs[prop].setDOMAttr;
     if (setter) setter(node.attrs[prop], attrs);
@@ -120,11 +166,17 @@ export type TableNodes = Record<
  * @public
  */
 export function tableNodes(options: TableNodesOptions): TableNodes {
+  // const extraRowAttrs = options.rowAttributes || {};
+  const rowAttrs: Record<string, AttributeSpec> = {
+    rowheight: { default: null },
+  };
+  
   const extraAttrs = options.cellAttributes || {};
   const cellAttrs: Record<string, AttributeSpec> = {
     colspan: { default: 1 },
     rowspan: { default: 1 },
     colwidth: { default: null },
+    rowheight: { default: null },
   };
   for (const prop in extraAttrs)
     cellAttrs[prop] = { default: extraAttrs[prop].default };
@@ -142,10 +194,13 @@ export function tableNodes(options: TableNodesOptions): TableNodes {
     },
     table_row: {
       content: '(table_cell | table_header)*',
+      attrs: rowAttrs,
       tableRole: 'row',
-      parseDOM: [{ tag: 'tr' }],
-      toDOM() {
-        return ['tr', 0];
+      parseDOM: [
+        { tag: 'tr', getAttrs: (dom) => getRowAttrs(dom, {}) },
+      ],
+      toDOM(node) {
+        return ['tr', setRowAttrs(node, {}), 0];
       },
     },
     table_cell: {

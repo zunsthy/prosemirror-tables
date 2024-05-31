@@ -15,6 +15,7 @@ import { CellAttrs } from './util';
  * @public
  */
 export type ColWidths = number[];
+export type RowHeights = number[];
 
 /**
  * @public
@@ -25,6 +26,11 @@ export type Problem =
       pos: number;
       colwidth: ColWidths;
     }
+  | {
+      type: 'rowheight mismatch';
+      pos: number;
+      rowheight: RowHeights;
+  }
   | {
       type: 'collision';
       pos: number;
@@ -147,6 +153,16 @@ export class TableMap {
     throw new RangeError(`No cell with offset ${pos} found`);
   }
 
+  // Find the top side of the cell at the given position.
+  rowCount(pos: number): number {
+    for (let i = 0; i < this.map.length; i++) {
+      if (this.map[i] == pos) {
+        return Math.floor(i / this.width);
+      }
+    }
+    throw new RangeError(`No cell with offset ${pos} found`);
+  }
+
   // Find the next cell in the given direction, starting from the cell
   // at `pos`, if any.
   nextCell(pos: number, axis: 'horiz' | 'vert', dir: number): null | number {
@@ -239,16 +255,28 @@ function computeMap(table: Node): TableMap {
   let mapPos = 0;
   let problems: Problem[] | null = null;
   const colWidths: ColWidths = [];
+  const rowHeights: RowHeights = [];
   for (let i = 0, e = width * height; i < e; i++) map[i] = 0;
 
+  // by row
   for (let row = 0, pos = 0; row < height; row++) {
     const rowNode = table.child(row);
+    const { rowheight } = rowNode.attrs;
+    // init row heights
+    if (rowheight?.[0]) {
+      rowHeights[row * 2] = rowheight[0];
+      // 只提供默认值
+      rowHeights[row * 2 + 1] = 0;
+    }
+    
     pos++;
+    // by cell in row
     for (let i = 0; ; i++) {
       while (mapPos < map.length && map[mapPos] != 0) mapPos++;
       if (i == rowNode.childCount) break;
       const cellNode = rowNode.child(i);
-      const { colspan, rowspan, colwidth } = cellNode.attrs;
+      const { colspan, rowspan, colwidth, rowheight } = cellNode.attrs;
+
       for (let h = 0; h < rowspan; h++) {
         if (h + row >= height) {
           (problems || (problems = [])).push({
@@ -258,6 +286,8 @@ function computeMap(table: Node): TableMap {
           });
           break;
         }
+
+        // check colspan and widths
         const start = mapPos + h * width;
         for (let w = 0; w < colspan; w++) {
           if (map[start + w] == 0) map[start + w] = pos;
@@ -270,6 +300,7 @@ function computeMap(table: Node): TableMap {
             });
           const colW = colwidth && colwidth[w];
           if (colW) {
+            /// ??? why module "width"
             const widthIndex = ((start + w) % width) * 2,
               prev = colWidths[widthIndex];
             if (
@@ -281,6 +312,22 @@ function computeMap(table: Node): TableMap {
             } else if (prev == colW) {
               colWidths[widthIndex + 1]++;
             }
+          }
+        }
+
+        // check heights
+        const rowH = rowheight && rowheight[h];
+        if (rowH) {
+          const heightIndex = (row + h) * 2,
+            prev = rowHeights[heightIndex];
+          if (
+            prev == null || 
+            (prev != rowH && (rowHeights[heightIndex + 1] == 1 || rowHeights[heightIndex + 1] == 0))
+          ) {
+            rowHeights[heightIndex] = rowH;
+            rowHeights[heightIndex + 1] = 1;
+          } else if (prev === rowH) {
+            rowHeights[heightIndex + 1]++;
           }
         }
       }
@@ -297,6 +344,7 @@ function computeMap(table: Node): TableMap {
 
   const tableMap = new TableMap(width, height, map, problems);
   let badWidths = false;
+  let badHeights = false;
 
   // For columns that have defined widths, but whose widths disagree
   // between rows, fix up the cells whose width doesn't match the
@@ -304,6 +352,10 @@ function computeMap(table: Node): TableMap {
   for (let i = 0; !badWidths && i < colWidths.length; i += 2)
     if (colWidths[i] != null && colWidths[i + 1] < height) badWidths = true;
   if (badWidths) findBadColWidths(tableMap, colWidths, table);
+
+  for (let i = 0; !badHeights && i < rowHeights.length; i += 2)
+    if (rowHeights[i] != null && rowHeights[i + 1] < width) badHeights = true;
+  if (badHeights) findBadRowHeights(tableMap, rowHeights, table);
 
   return tableMap;
 }
@@ -373,5 +425,49 @@ function freshColWidth(attrs: Attrs): ColWidths {
   if (attrs.colwidth) return attrs.colwidth.slice();
   const result: ColWidths = [];
   for (let i = 0; i < attrs.colspan; i++) result.push(0);
+  return result;
+}
+
+function findBadRowHeights(
+  map: TableMap,
+  rowHeights: RowHeights,
+  table: Node,
+): void {
+  if (!map.problems) map.problems = [];
+  const seen: Record<number, boolean> = {};
+  for (let i = 0; i < map.map.length; i++) {
+    const pos = map.map[i];
+    if (seen[pos]) continue;
+    seen[pos] = true;
+    const node = table.nodeAt(pos);
+    if (!node) {
+      throw new RangeError(`No cell with offset ${pos} found`);
+    }
+    
+    let updated = null;
+    const attrs = node.attrs as CellAttrs;
+    for (let j = 0; j < attrs.rowspan; j++) {
+      const row = Math.floor(i / map.height) + j;
+      const rowHeight = rowHeights[row * 2];
+      if (
+        rowHeight != null &&
+        (!attrs.rowheight || attrs.rowheight[j] !== rowHeight)
+      ) {
+        (updated || (updated = freshRowHeight(attrs)))[j] = rowHeight;
+      }
+    }
+    if (updated)
+      map.problems.unshift({
+        type: 'rowheight mismatch',
+        pos,
+        rowheight: updated,
+      });
+  }
+}
+
+function freshRowHeight(attrs: Attrs): RowHeights {
+  if (attrs.rowheight) return attrs.rowheight.slice();
+  const result: RowHeights = [];
+  for (let i = 0; i < attrs.rowspan; i++) result.push(0);
   return result;
 }
